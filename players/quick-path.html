@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Encryption - Quick Path (Client-side ClearKeys)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.9.3/shaka-player.compiled.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .content {
+            padding: 20px;
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        video {
+            width: 100%;
+            max-width: 800px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5a6fd8;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .info-panel {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info-panel h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .key-display {
+            font-family: 'Courier New', monospace;
+            background: #e9ecef;
+            padding: 8px;
+            border-radius: 3px;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .explanation {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Video Encryption Pipeline</h1>
+            <p>Quick Path - Client-side ClearKeys (No License Server)</p>
+        </div>
+        
+        <div class="content">
+            <div class="explanation">
+                <h3>🚀 Quick Path Explanation</h3>
+                <p>This demo uses <strong>client-side ClearKeys</strong> configuration, which means:</p>
+                <ul>
+                    <li>✅ No license server required</li>
+                    <li>✅ Keys are configured directly in the player</li>
+                    <li>✅ Great for testing encryption and manifests</li>
+                    <li>⚠️ Not suitable for production (keys are visible in client code)</li>
+                </ul>
+            </div>
+
+            <div class="video-container">
+                <video id="video" controls poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5FbmNyeXB0ZWQgVmlkZW8gUGxheWVyPC90ZXh0Pjwvc3ZnPg==">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+
+            <div class="controls">
+                <button id="loadVideo">🎬 Load Encrypted Video</button>
+                <button id="reloadConfig">🔄 Reload Configuration</button>
+                <button id="testKeys">🔑 Test Key Configuration</button>
+            </div>
+
+            <div id="status" class="status" style="display: none;"></div>
+
+            <div class="info-panel">
+                <h3>📋 Current Configuration</h3>
+                <p><strong>Manifest URL:</strong> <span id="manifestUrl">Loading...</span></p>
+                <p><strong>Key ID (hex):</strong></p>
+                <div id="keyId" class="key-display">Loading...</div>
+                <p><strong>Key (hex):</strong></p>
+                <div id="key" class="key-display">Loading...</div>
+            </div>
+
+            <div class="info-panel">
+                <h3>📝 Event Log</h3>
+                <div id="eventLog" class="log"></div>
+            </div>
+
+            <div class="explanation">
+                <h3>🔧 How This Works</h3>
+                <ol>
+                    <li>Video content is encrypted using MPEG-CENC with Shaka Packager</li>
+                    <li>Shaka Player is configured with clearKeys mapping (KID → Key)</li>
+                    <li>Browser's EME (Encrypted Media Extensions) handles decryption</li>
+                    <li>No network requests to license servers are made</li>
+                </ol>
+                <p><strong>Next step:</strong> Try the <a href="realistic-path.html">Realistic Path</a> with license server authentication!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let player;
+        let config = null;
+
+        // Logging function
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('eventLog');
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            logElement.textContent += logEntry;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(logEntry.trim());
+        }
+
+        // Status display function
+        function showStatus(message, type = 'loading') {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+            statusElement.style.display = 'block';
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Load player configuration
+        async function loadConfig() {
+            try {
+                showStatus('Loading configuration...', 'loading');
+                const response = await fetch('/player-config.json');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                config = await response.json();
+                
+                // Update UI with configuration
+                document.getElementById('manifestUrl').textContent = config.manifestUrl;
+                
+                const keyIds = Object.keys(config.clearKeys);
+                if (keyIds.length > 0) {
+                    const keyId = keyIds[0];
+                    const key = config.clearKeys[keyId];
+                    
+                    document.getElementById('keyId').textContent = keyId;
+                    document.getElementById('key').textContent = key;
+                    
+                    log(`Configuration loaded successfully`);
+                    log(`Key ID: ${keyId}`);
+                    log(`Key: ${key.substring(0, 8)}...`);
+                    showStatus('Configuration loaded successfully!', 'success');
+                } else {
+                    throw new Error('No clear keys found in configuration');
+                }
+                
+                return config;
+            } catch (error) {
+                log(`Failed to load configuration: ${error.message}`, 'error');
+                showStatus('Failed to load configuration. Make sure you\'ve run the packaging script.', 'error');
+                
+                // Show default values
+                document.getElementById('manifestUrl').textContent = 'Configuration not found';
+                document.getElementById('keyId').textContent = 'Run npm run generate-keys';
+                document.getElementById('key').textContent = 'Run npm run package-video';
+                
+                throw error;
+            }
+        }
+
+        // Initialize Shaka Player
+        async function initPlayer() {
+            try {
+                log('Initializing Shaka Player...');
+                
+                // Install polyfills
+                shaka.polyfill.installAll();
+                
+                // Check for browser support
+                if (!shaka.Player.isBrowserSupported()) {
+                    throw new Error('Browser does not support Shaka Player');
+                }
+                
+                // Create player
+                const video = document.getElementById('video');
+                player = new shaka.Player(video);
+                
+                // Configure error handling
+                player.addEventListener('error', (event) => {
+                    const error = event.detail;
+                    log(`Player error: ${error.message}`, 'error');
+                    showStatus(`Playback error: ${error.message}`, 'error');
+                });
+                
+                log('Shaka Player initialized successfully');
+                return player;
+            } catch (error) {
+                log(`Failed to initialize player: ${error.message}`, 'error');
+                showStatus('Failed to initialize video player', 'error');
+                throw error;
+            }
+        }
+
+        // Load and play encrypted video
+        async function loadVideo() {
+            try {
+                if (!config) {
+                    await loadConfig();
+                }
+                
+                if (!player) {
+                    await initPlayer();
+                }
+                
+                showStatus('Loading encrypted video...', 'loading');
+                log('Configuring clearKeys...');
+                
+                // Configure clearKeys
+                player.configure({
+                    drm: {
+                        clearKeys: config.clearKeys
+                    }
+                });
+                
+                log(`Configured clearKeys: ${Object.keys(config.clearKeys).length} key(s)`);
+                log('Loading manifest...');
+                
+                // Load the manifest
+                await player.load(config.manifestUrl);
+                
+                log('Video loaded successfully!');
+                showStatus('Video loaded successfully! You can now play the encrypted content.', 'success');
+                
+                // Update button states
+                document.getElementById('loadVideo').textContent = '✅ Video Loaded';
+                document.getElementById('loadVideo').disabled = true;
+                
+            } catch (error) {
+                log(`Failed to load video: ${error.message}`, 'error');
+                showStatus(`Failed to load video: ${error.message}`, 'error');
+                
+                // Provide troubleshooting hints
+                if (error.message.includes('NETWORK')) {
+                    log('HINT: Make sure the content server is running (npm run serve-content)', 'error');
+                } else if (error.message.includes('CLEARKEY')) {
+                    log('HINT: Check if the keys match between packaging and player configuration', 'error');
+                }
+            }
+        }
+
+        // Test key configuration
+        function testKeys() {
+            if (!config || !config.clearKeys) {
+                showStatus('No configuration loaded', 'error');
+                return;
+            }
+            
+            log('Testing key configuration...');
+            
+            const keys = config.clearKeys;
+            const keyCount = Object.keys(keys).length;
+            
+            if (keyCount === 0) {
+                log('ERROR: No clearKeys configured', 'error');
+                showStatus('No encryption keys configured', 'error');
+                return;
+            }
+            
+            log(`Found ${keyCount} encryption key(s)`);
+            
+            // Validate key format
+            for (const [kid, key] of Object.entries(keys)) {
+                const kidValid = /^[0-9a-f]{32}$/i.test(kid);
+                const keyValid = /^[0-9a-f]{32}$/i.test(key);
+                
+                log(`Key ID ${kid}: ${kidValid ? 'VALID' : 'INVALID'} format`);
+                log(`Key ${key.substring(0, 8)}...: ${keyValid ? 'VALID' : 'INVALID'} format`);
+                
+                if (!kidValid || !keyValid) {
+                    showStatus('Invalid key format detected', 'error');
+                    return;
+                }
+            }
+            
+            log('All keys have valid format');
+            showStatus('Key configuration test passed!', 'success');
+        }
+
+        // Event listeners
+        document.getElementById('loadVideo').addEventListener('click', loadVideo);
+        document.getElementById('reloadConfig').addEventListener('click', async () => {
+            document.getElementById('loadVideo').textContent = '🎬 Load Encrypted Video';
+            document.getElementById('loadVideo').disabled = false;
+            await loadConfig();
+        });
+        document.getElementById('testKeys').addEventListener('click', testKeys);
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            log('Page loaded, initializing...');
+            
+            try {
+                await loadConfig();
+                await initPlayer();
+                
+                log('Ready to load encrypted video');
+                showStatus('Ready! Click "Load Encrypted Video" to start.', 'success');
+            } catch (error) {
+                log('Initialization failed - you can still try loading manually', 'error');
+            }
+        });
+    </script>
+</body>
+</html>
