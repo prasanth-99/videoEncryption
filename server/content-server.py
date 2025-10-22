@@ -79,7 +79,11 @@ class VideoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 
         except Exception as e:
             print(f"Error serving {file_path}: {e}")
-            self.send_error(500, f"Internal server error: {str(e)}")
+            try:
+                self.send_error(500, f"Internal server error: {str(e)}")
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                # Connection already closed, can't send error
+                pass
     
     def serve_file_with_range(self, file_path):
         """Serve file with HTTP range support for streaming"""
@@ -128,7 +132,7 @@ class VideoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             # Calculate content length
             content_length = end - start + 1
             
-            print(f"📺 Serving range {start}-{end}/{file_size} for {os.path.basename(file_path)}")
+            print(f"Serving range {start}-{end}/{file_size} for {os.path.basename(file_path)}")
             
             # Send headers
             self.send_response(206)  # Partial Content
@@ -153,19 +157,23 @@ class VideoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     try:
                         self.wfile.write(chunk)
                         remaining -= len(chunk)
-                    except (BrokenPipeError, ConnectionAbortedError):
+                    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
                         # Client disconnected, this is normal for video streaming
-                        print(f"📱 Client disconnected during range request for {os.path.basename(file_path)}")
-                        break
+                        print(f"Client disconnected during range request for {os.path.basename(file_path)}")
+                        return  # Don't try to send error response
                         
         except Exception as e:
-            print(f"❌ Range request error: {e}")
-            self.send_error(500, str(e))
+            print(f"Range request error: {e}")
+            try:
+                self.send_error(500, str(e))
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                # Connection already closed, can't send error
+                pass
     
     def handle_normal_request(self, file_path, file_size):
         """Handle normal HTTP requests"""
         try:
-            print(f"📄 Serving {os.path.basename(file_path)} ({file_size} bytes)")
+            print(f"Serving {os.path.basename(file_path)} ({file_size} bytes)")
             
             # Send headers
             self.send_response(200)
@@ -184,16 +192,24 @@ class VideoHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                             break
                         try:
                             self.wfile.write(chunk)
-                        except (BrokenPipeError, ConnectionAbortedError):
-                            print(f"📱 Client disconnected during transfer of {os.path.basename(file_path)}")
-                            break
+                        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                            print(f"Client disconnected during transfer of {os.path.basename(file_path)}")
+                            return  # Don't try to send error response
                 else:
                     # Small files, send all at once
-                    self.wfile.write(f.read())
+                    try:
+                        self.wfile.write(f.read())
+                    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                        print(f"Client disconnected during transfer of {os.path.basename(file_path)}")
+                        return
                     
         except Exception as e:
-            print(f"❌ Normal request error: {e}")
-            self.send_error(500, str(e))
+            print(f"Normal request error: {e}")
+            try:
+                self.send_error(500, str(e))
+            except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+                # Connection already closed, can't send error
+                pass
     
     def log_message(self, format, *args):
         """Custom log format"""
@@ -217,35 +233,43 @@ def main():
     # Change to project root directory
     os.chdir(Path(__file__).parent.parent)
     
-    print("🎬 Enhanced Video Content Server")
+    # Handle Windows encoding issues
+    import sys
+    if sys.platform.startswith('win'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except:
+            pass
+    
+    print("Enhanced Video Content Server")
     print("=" * 50)
-    print(f"🚀 Starting server on port {port}")
-    print(f"📁 Serving content from: {os.getcwd()}")
-    print(f"🌐 Access your content at: http://localhost:{port}")
+    print(f"Starting server on port {port}")
+    print(f"Serving content from: {os.getcwd()}")
+    print(f"Access your content at: http://localhost:{port}")
     print()
-    print("📋 Available endpoints:")
-    print(f"   📺 Video player: http://localhost:{port}/players/test-unencrypted.html")
-    print(f"   🎥 Unencrypted video: http://localhost:{port}/content/input.mp4")
-    print(f"   🔒 Encrypted video: http://localhost:{port}/video_encrypted.mp4")
-    print(f"   📄 DASH manifest: http://localhost:{port}/manifest.mpd")
+    print("Available endpoints:")
+    print(f"   Video player: http://localhost:{port}/players/test-unencrypted.html")
+    print(f"   Unencrypted video: http://localhost:{port}/content/input.mp4")
+    print(f"   Encrypted video: http://localhost:{port}/video_encrypted.mp4")
+    print(f"   DASH manifest: http://localhost:{port}/manifest.mpd")
     print()
-    print("✨ Features:")
-    print("   ✅ HTTP Range requests for video streaming")
-    print("   ✅ CORS headers for cross-origin requests")
-    print("   ✅ Proper MIME types for video content")
-    print("   ✅ Connection error handling")
-    print("   ✅ Threading support for concurrent requests")
+    print("Features:")
+    print("   - HTTP Range requests for video streaming")
+    print("   - CORS headers for cross-origin requests")
+    print("   - Proper MIME types for video content")
+    print("   - Connection error handling")
+    print("   - Threading support for concurrent requests")
     print()
-    print("📝 Press Ctrl+C to stop the server")
+    print("Press Ctrl+C to stop the server")
     print("-" * 50)
     
     try:
         with ThreadedHTTPServer(("", port), VideoHTTPRequestHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n🛑 Server stopped by user")
+        print("\nServer stopped by user")
     except Exception as e:
-        print(f"❌ Server error: {e}")
+        print(f"Server error: {e}")
 
 if __name__ == "__main__":
     main()

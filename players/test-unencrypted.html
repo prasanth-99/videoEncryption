@@ -154,10 +154,16 @@
                     <p>Direct MP4 playback</p>
                     <button onclick="loadUnencryptedVideo()">🎬 Load Original Video</button>
                 </div>
+                <div class="test-card" id="html5Card">
+                    <h3>🎥 HTML5 Video Test</h3>
+                    <p>Basic browser compatibility</p>
+                    <button onclick="testHTML5Video()">🧪 Test HTML5 Video</button>
+                </div>
                 <div class="test-card" id="encryptedCard">
                     <h3>🔐 Encrypted Video</h3>
                     <p>DASH + ClearKey</p>
                     <button onclick="loadEncryptedVideo()">🔑 Load Encrypted Video</button>
+                </div>
                 </div>
             </div>
 
@@ -274,6 +280,111 @@
             }
         }
 
+        // Test HTML5 video compatibility
+        async function testHTML5Video() {
+            try {
+                showStatus('Testing HTML5 video compatibility...', 'loading');
+                log('🧪 Testing HTML5 video element compatibility');
+                
+                // Check browser codec support
+                log('🌐 Browser Codec Support:');
+                const testVideo = document.createElement('video');
+                const mp4Support = testVideo.canPlayType('video/mp4');
+                const h264Support = testVideo.canPlayType('video/mp4; codecs="avc1.42E01E"');
+                const aacSupport = testVideo.canPlayType('audio/mp4; codecs="mp4a.40.2"');
+                
+                log(`  • MP4 Container: ${mp4Support || 'not supported'}`);
+                log(`  • H.264 Video: ${h264Support || 'not supported'}`);
+                log(`  • AAC Audio: ${aacSupport || 'not supported'}`);
+                
+                if (!mp4Support || mp4Support === 'no') {
+                    log('❌ Browser does not support MP4 format', 'error');
+                    showStatus('❌ Browser does not support MP4 format', 'error');
+                    return;
+                }
+                
+                // Test direct video loading
+                log('🎬 Testing direct video element loading...');
+                
+                const videoElement = document.getElementById('videoPlayer');
+                videoElement.style.display = 'block';
+                
+                // Create HTML5 video for testing
+                const htmlVideo = document.createElement('video');
+                htmlVideo.controls = true;
+                htmlVideo.style.width = '100%';
+                htmlVideo.style.height = '400px';
+                htmlVideo.src = 'http://localhost:8080/content/input.mp4';
+                
+                // Replace Shaka player temporarily
+                const container = videoElement.parentNode;
+                container.replaceChild(htmlVideo, videoElement);
+                
+                // Set up event listeners
+                htmlVideo.addEventListener('loadstart', () => {
+                    log('📥 Video loading started...');
+                });
+                
+                htmlVideo.addEventListener('loadedmetadata', () => {
+                    log(`✅ Video metadata loaded successfully!`);
+                    log(`  📏 Resolution: ${htmlVideo.videoWidth}x${htmlVideo.videoHeight}`);
+                    log(`  ⏱️ Duration: ${htmlVideo.duration.toFixed(2)} seconds`);
+                    log(`  🎬 Can play through: ${htmlVideo.readyState >= 4 ? 'Yes' : 'Checking...'}`);
+                    showStatus('✅ HTML5 video loaded successfully!', 'success');
+                });
+                
+                htmlVideo.addEventListener('canplay', () => {
+                    log('▶️ Video ready to play');
+                });
+                
+                htmlVideo.addEventListener('error', (e) => {
+                    const error = htmlVideo.error;
+                    log(`❌ HTML5 video error: ${error.message} (Code: ${error.code})`, 'error');
+                    
+                    // Detailed error analysis
+                    switch(error.code) {
+                        case MediaError.MEDIA_ERR_ABORTED:
+                            log('  📋 Error Type: MEDIA_ERR_ABORTED - User aborted', 'error');
+                            break;
+                        case MediaError.MEDIA_ERR_NETWORK:
+                            log('  📋 Error Type: MEDIA_ERR_NETWORK - Network error', 'error');
+                            log('  💡 Check if content server is running on port 8080', 'error');
+                            break;
+                        case MediaError.MEDIA_ERR_DECODE:
+                            log('  📋 Error Type: MEDIA_ERR_DECODE - Video format not supported', 'error');
+                            log('  💡 Video codec/format is incompatible with browser', 'error');
+                            break;
+                        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                            log('  📋 Error Type: MEDIA_ERR_SRC_NOT_SUPPORTED - Source not supported', 'error');
+                            log('  💡 File format or codec not supported by browser', 'error');
+                            break;
+                    }
+                    
+                    showStatus('❌ HTML5 video failed - see log for details', 'error');
+                });
+                
+                htmlVideo.addEventListener('progress', () => {
+                    if (htmlVideo.buffered.length > 0) {
+                        const buffered = (htmlVideo.buffered.end(0) / htmlVideo.duration) * 100;
+                        log(`📊 Video buffered: ${buffered.toFixed(1)}%`);
+                    }
+                });
+                
+                // Attempt to load
+                htmlVideo.load();
+                
+                updateTestInfo('HTML5 Test', 'content/input.mp4', 'Native HTML5 Video');
+                
+                // Store reference to restore later
+                window.originalVideoElement = videoElement;
+                window.testVideoElement = htmlVideo;
+                
+            } catch (error) {
+                log(`❌ HTML5 video test failed: ${error.message}`, 'error');
+                showStatus('❌ HTML5 video test failed', 'error');
+            }
+        }
+
         // Test unencrypted video
         async function loadUnencryptedVideo() {
             try {
@@ -293,8 +404,58 @@
                 showStatus('✅ Unencrypted video ready! This proves basic playback works.', 'success');
                 
             } catch (error) {
-                log(`Failed to load unencrypted video: ${error.message}`, 'error');
-                showStatus(`Failed to load unencrypted video: ${error.message}`, 'error');
+                log(`❌ Failed to load unencrypted video: ${error.message}`, 'error');
+                
+                // Enhanced error analysis for Shaka errors
+                if (error.message.includes('3016')) {
+                    log('🔍 Shaka Error 3016 Analysis:', 'error');
+                    log('  📋 Error Type: CONTENT_UNSUPPORTED_BY_BROWSER', 'error');
+                    log('  🎯 Common Causes:', 'error');
+                    log('    • Video codec not supported (need H.264/AVC)', 'error');
+                    log('    • Audio codec not supported (need AAC)', 'error');
+                    log('    • Container format issues', 'error');
+                    log('    • Video resolution too high', 'error');
+                    log('    • Missing browser codec support', 'error');
+                    log('  🔧 Solutions:', 'error');
+                    log('    1. Check video format with browser tools', 'error');
+                    log('    2. Convert video: ffmpeg -i input.mp4 -c:v libx264 -c:a aac -profile:v baseline content/input.mp4', 'error');
+                    log('    3. Try a different video file', 'error');
+                    log('    4. Check browser codec support below', 'error');
+                    
+                    // Additional browser compatibility check
+                    log('🌐 Browser Codec Support Check:', 'error');
+                    const video = document.createElement('video');
+                    const h264Support = video.canPlayType('video/mp4; codecs="avc1.42E01E"');
+                    const aacSupport = video.canPlayType('audio/mp4; codecs="mp4a.40.2"');
+                    const generalMp4 = video.canPlayType('video/mp4');
+                    
+                    log(`    • General MP4 Support: ${generalMp4 || 'none'}`, 'error');
+                    log(`    • H.264 Support: ${h264Support || 'none'}`, 'error');
+                    log(`    • AAC Support: ${aacSupport || 'none'}`, 'error');
+                    
+                    if (!h264Support || h264Support === 'no') {
+                        log('    ❌ H.264 codec not supported by browser', 'error');
+                    }
+                    if (!aacSupport || aacSupport === 'no') {
+                        log('    ⚠️ AAC codec not supported by browser', 'error');
+                    }
+                    
+                    // Test direct video element loading
+                    log('🧪 Testing direct HTML5 video element...', 'error');
+                    const testVideo = document.createElement('video');
+                    testVideo.src = 'http://localhost:8080/content/input.mp4';
+                    testVideo.addEventListener('loadedmetadata', () => {
+                        log(`  ✅ HTML5 video can load metadata: ${testVideo.videoWidth}x${testVideo.videoHeight}`, 'error');
+                        log(`  📊 Duration: ${testVideo.duration} seconds`, 'error');
+                    });
+                    testVideo.addEventListener('error', (e) => {
+                        log(`  ❌ HTML5 video also fails: ${e.message}`, 'error');
+                        log('  💡 This confirms the video file has compatibility issues', 'error');
+                    });
+                    testVideo.load();
+                }
+                
+                showStatus('❌ Unencrypted video failed to load - see log for details', 'error');
             }
         }
 
@@ -308,7 +469,7 @@
                 
                 // Load player configuration with detailed logging
                 log('Step 1: Loading player configuration...');
-                const configResponse = await fetch('/player-config.json');
+                const configResponse = await fetch(`/content/player-config.json?t=${Date.now()}`);
                 if (!configResponse.ok) {
                     throw new Error(`Config request failed: ${configResponse.status} ${configResponse.statusText}`);
                 }
@@ -347,10 +508,16 @@
                 
                 // Test manifest accessibility first
                 log('Step 4: Testing manifest accessibility...');
-                const manifestUrl = config.manifestUrl;
+                const manifestUrl = config.manifestUrl + `?t=${Date.now()}`;
                 log(`Manifest URL: ${manifestUrl}`);
                 
-                const manifestResponse = await fetch(manifestUrl);
+                const manifestResponse = await fetch(manifestUrl, {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache'
+                    }
+                });
                 if (!manifestResponse.ok) {
                     throw new Error(`Manifest request failed: ${manifestResponse.status} ${manifestResponse.statusText}`);
                 }
@@ -476,6 +643,161 @@
                 }
                 
                 log('🎬 Attempting to load manifest with Shaka Player...');
+                
+                // Comprehensive diagnostic checks before loading
+                log('🔍 DIAGNOSTIC: Pre-load checks starting...');
+                
+                try {
+                    // 1. Manifest URL validation
+                    log(`1️⃣ Manifest URL check: ${manifestUrl}`);
+                    try {
+                        const urlObj = new URL(manifestUrl);
+                        log(`   ✅ URL is valid: ${urlObj.href}`);
+                    } catch (urlError) {
+                        log(`   ❌ Invalid URL: ${urlError.message}`, 'error');
+                    }
+                
+                // 2. Manifest content analysis
+                log('2️⃣ Manifest content analysis:');
+                log(`   Size: ${manifestText.length} bytes`);
+                log(`   Contains video track: ${manifestText.includes('contentType="video"')}`);
+                log(`   Contains ContentProtection: ${manifestText.includes('ContentProtection')}`);
+                
+                // 3. DRM UUID detailed check
+                log('3️⃣ DRM UUID analysis:');
+                const allUUIDs = manifestText.match(/urn:uuid:([a-f0-9-]+)/g) || [];
+                log(`   Found UUIDs: ${allUUIDs.join(', ')}`);
+                const hasClearKey = allUUIDs.some(uuid => uuid.includes('e2719d58-a985-b3c9-781a-b030af78d30e'));
+                log(`   ClearKey UUID present: ${hasClearKey}`);
+                
+                // 4. PSSH analysis with detailed decoding
+                log('4️⃣ PSSH box analysis:');
+                const psshMatches = manifestText.match(/<cenc:pssh>([^<]+)<\/cenc:pssh>/g) || [];
+                log(`   PSSH boxes found: ${psshMatches.length}`);
+                
+                psshMatches.forEach((pssh, i) => {
+                    const base64Data = pssh.match(/>([^<]+)</)[1];
+                    log(`   PSSH ${i + 1}: ${base64Data}`);
+                    
+                    try {
+                        // Decode PSSH box structure
+                        const psshBytes = atob(base64Data);
+                        const psshArray = new Uint8Array(psshBytes.length);
+                        for (let j = 0; j < psshBytes.length; j++) {
+                            psshArray[j] = psshBytes.charCodeAt(j);
+                        }
+                        
+                        // Parse PSSH box header
+                        if (psshArray.length >= 32) {
+                            // Extract system ID (bytes 12-27)
+                            const systemId = Array.from(psshArray.slice(12, 28))
+                                .map(b => b.toString(16).padStart(2, '0'))
+                                .join('');
+                            
+                            const formattedSystemId = [
+                                systemId.substring(0, 8),
+                                systemId.substring(8, 12),
+                                systemId.substring(12, 16),
+                                systemId.substring(16, 20),
+                                systemId.substring(20, 32)
+                            ].join('-');
+                            
+                            log(`     📋 Decoded PSSH System ID: ${formattedSystemId}`);
+                            
+                            // Check against known DRM systems
+                            const drmSystems = {
+                                'e2719d58-a985-b3c9-781a-b030af78d30e': 'ClearKey',
+                                '1077efec-c0b2-4d02-ace3-3c1e52e2fb4b': 'Common Encryption (Generic)',
+                                'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed': 'Widevine',
+                                '9a04f079-9840-4286-ab92-e65be0885f95': 'PlayReady',
+                                '94ce86fb-07ff-4f43-adb8-93d2fa968ca2': 'FairPlay'
+                            };
+                            
+                            const drmType = drmSystems[formattedSystemId] || 'Unknown DRM System';
+                            log(`     🎯 DRM System: ${drmType}`);
+                            
+                            if (formattedSystemId === 'e2719d58-a985-b3c9-781a-b030af78d30e') {
+                                log(`     ✅ PSSH contains ClearKey system ID`);
+                            } else {
+                                log(`     ❌ PSSH contains non-ClearKey system ID: ${drmType}`, 'error');
+                                log(`     💡 This is likely the root cause of Error 3004`, 'error');
+                            }
+                            
+                            // Extract KID count and KIDs if present
+                            if (psshArray.length >= 36) {
+                                const kidCount = new DataView(psshArray.buffer, 32, 4).getUint32(0, false);
+                                log(`     📊 Number of KIDs in PSSH: ${kidCount}`);
+                                
+                                if (kidCount > 0 && psshArray.length >= 36 + (kidCount * 16)) {
+                                    for (let k = 0; k < kidCount; k++) {
+                                        const kidStart = 36 + (k * 16);
+                                        const kidBytes = psshArray.slice(kidStart, kidStart + 16);
+                                        const kidHex = Array.from(kidBytes)
+                                            .map(b => b.toString(16).padStart(2, '0'))
+                                            .join('');
+                                        log(`     🔑 KID ${k + 1}: ${kidHex}`);
+                                    }
+                                }
+                            }
+                        } else {
+                            log(`     ⚠️ PSSH box too short: ${psshArray.length} bytes`);
+                        }
+                    } catch (decodeError) {
+                        log(`     ❌ Failed to decode PSSH: ${decodeError.message}`, 'error');
+                    }
+                });
+                
+                // Additional PSSH compatibility check
+                if (psshMatches.length > 0) {
+                    log('   🔍 PSSH Compatibility Analysis:');
+                    const hasClearKeyPSSH = manifestText.includes('e2719d58-a985-b3c9-781a-b030af78d30e');
+                    const hasOtherDRMPSSH = manifestText.includes('1077efec-c0b2-4d02-ace3-3c1e52e2fb4b');
+                    
+                    log(`     ClearKey UUID in manifest: ${hasClearKeyPSSH}`);
+                    log(`     Other DRM UUID in manifest: ${hasOtherDRMPSSH}`);
+                    
+                    if (!hasClearKeyPSSH && hasOtherDRMPSSH) {
+                        log(`     🚨 PROBLEM: Manifest uses ClearKey UUID but PSSH contains different DRM data`, 'error');
+                        log(`     💡 Solution: Remove PSSH box or generate ClearKey-compatible PSSH`, 'error');
+                    }
+                }
+                
+                // 5. Key ID consistency check
+                log('5️⃣ Key ID consistency check:');
+                const manifestKID = manifestText.match(/cenc:default_KID="([^"]+)"/)?.[1];
+                const configKIDs = Object.keys(config.clearKeys);
+                log(`   Manifest KID: ${manifestKID}`);
+                log(`   Config KIDs: ${configKIDs.join(', ')}`);
+                
+                // 6. Player state check
+                log('6️⃣ Player state check:');
+                const videoElement = document.getElementById('video');
+                log(`   Video element exists: ${!!videoElement}`);
+                log(`   Player initialized: ${!!player}`);
+                log(`   Player version: ${shaka.Player.version}`);
+                
+                // 7. Browser capabilities detailed check
+                log('7️⃣ Browser capabilities:');
+                log(`   EME support: ${!!navigator.requestMediaKeySystemAccess}`);
+                log(`   ClearKey support: Testing...`);
+                
+                try {
+                    await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [{
+                        initDataTypes: ['cenc'],
+                        videoCapabilities: [{contentType: 'video/mp4; codecs="avc1.640033"'}]
+                    }]);
+                    log(`   ✅ ClearKey with CENC supported`);
+                } catch (clearKeyError) {
+                    log(`   ❌ ClearKey test failed: ${clearKeyError.message}`, 'error');
+                }
+                
+                log('🔍 DIAGNOSTIC: All pre-checks complete, attempting load...');
+                
+                } catch (diagnosticError) {
+                    log(`⚠️  Diagnostic check failed: ${diagnosticError.message}`, 'error');
+                    log('Continuing with player load attempt...');
+                }
+                
                 await player.load(manifestUrl);
                 
                 updateTestInfo('Encrypted', 'manifest.mpd', 'Shaka Player + ClearKey');
@@ -486,6 +808,43 @@
                 log(`❌ Failed to load encrypted video: ${error.message}`, 'error');
                 log(`Error stack: ${error.stack}`, 'error');
                 
+                // Comprehensive error analysis
+                log('🔥 ERROR ANALYSIS:', 'error');
+                log(`   Error type: ${error.constructor.name}`, 'error');
+                log(`   Error code: ${error.code || 'No code'}`, 'error');
+                log(`   Error category: ${error.category || 'No category'}`, 'error');
+                log(`   Error severity: ${error.severity || 'No severity'}`, 'error');
+                
+                // Shaka-specific error analysis
+                if (error.message.includes('Shaka Error')) {
+                    const errorCode = error.message.match(/Shaka Error (\d+)/)?.[1];
+                    log(`🎯 Shaka Error Code: ${errorCode}`, 'error');
+                    
+                    switch (errorCode) {
+                        case '3004':
+                            log('📋 Error 3004 Analysis:', 'error');
+                            log('   - DRM configuration failed', 'error');
+                            log('   - Possible causes:', 'error');
+                            log('     • Incompatible DRM UUID in manifest', 'error');
+                            log('     • PSSH box format mismatch', 'error');
+                            log('     • Browser EME restrictions', 'error');
+                            log('     • Key system initialization failure', 'error');
+                            break;
+                        case '3016':
+                            log('📋 Error 3016 Analysis:', 'error');
+                            log('   - License request failed', 'error');
+                            break;
+                        default:
+                            log(`📋 Unknown Shaka Error: ${errorCode}`, 'error');
+                    }
+                }
+                
+                // Runtime environment check
+                log('🌐 Runtime Environment Check:', 'error');
+                log(`   User Agent: ${navigator.userAgent}`, 'error');
+                log(`   Is HTTPS: ${location.protocol === 'https:'}`, 'error');
+                log(`   Is localhost: ${location.hostname === 'localhost'}`, 'error');
+                
                 // Additional context for common issues
                 if (error.message.includes('3004')) {
                     log('🔧 Troubleshooting suggestions:', 'error');
@@ -493,6 +852,8 @@
                     log('  2. Verify KID format consistency (no dashes)', 'error');
                     log('  3. Ensure manifest is valid XML', 'error');
                     log('  4. Check browser EME support', 'error');
+                    log('  5. Verify PSSH box compatibility', 'error');
+                    log('  6. Test with different browser', 'error');
                 }
                 
                 showStatus(`Failed to load encrypted video: ${error.message}`, 'error');

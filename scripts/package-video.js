@@ -64,16 +64,17 @@ function packageVideo(keys) {
     console.log(`Using packager: ${packagerCmd}`);
     
     // Shaka Packager command for DASH
-    // Use ClearKey-specific configuration for better compatibility
+    // Generate with Common Encryption for ClearKey compatibility
     const command = `${packagerCmd} ` +
         `input="${INPUT_VIDEO}",stream=video,output="${path.join(CONTENT_DIR, 'video_encrypted.mp4')}" ` +
         `--enable_raw_key_encryption ` +
         `--keys key_id=${kid}:key=${key} ` +
         `--protection_scheme cenc ` +
         `--clear_lead 0 ` +
+        `--generate_static_live_mpd ` +
         `--mpd_output "${path.join(CONTENT_DIR, 'manifest.mpd')}"`;
     
-    console.log('🔧 Note: Generating ClearKey-compatible manifest...');
+    console.log('🔧 Note: Generating CENC manifest for ClearKey...');
     
     try {
         console.log('\n🔧 Running Shaka Packager...');
@@ -141,8 +142,8 @@ function generateHLS(keys) {
  */
 function createPlayerConfig(keys) {
     const config = {
-        manifestUrl: 'http://localhost:8080/manifest.mpd',
-        hlsUrl: 'http://localhost:8080/master.m3u8',
+        manifestUrl: 'http://localhost:8080/content/manifest.mpd',
+        hlsUrl: 'http://localhost:8080/content/master.m3u8',
         licenseUrl: 'http://localhost:8443/license?token=devtoken',
         clearKeys: {
             [keys.hex.kid]: keys.hex.key
